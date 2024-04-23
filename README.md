@@ -89,3 +89,26 @@ train_student(teacher, student, train_loader)
 ```
 
 在这个例子中，我们首先定义了一个较大的教师模型和一个较小的学生模型。我们使用MNIST数据集进行训练，通过蒸馏过程使学生模型学习教师模型的输出。这只是一个基础示例，实际应用中可能需要更多的调优和细化。
+
+## 验证
+```
+def test_model(model, device, test_loader):
+    model.eval()  # 设置为评估模式
+    test_loss = 0
+    correct = 0
+    with torch.no_grad():  # 停止跟踪梯度
+        for data, target in test_loader:
+            data, target = data.to(device), target.to(device)
+            output = model(data)
+            test_loss += criterion(output, target).item()  # 累加损失值
+            pred = output.argmax(dim=1, keepdim=True)  # 获取概率最高的类别
+            correct += pred.eq(target.view_as(pred)).sum().item()
+
+    test_loss /= len(test_loader.dataset)
+    accuracy = 100. * correct / len(test_loader.dataset)
+
+    print(f'\nTest set: Average loss: {test_loss:.4f}, Accuracy: {correct}/{len(test_loader.dataset)} ({accuracy:.2f}%)')
+
+# 调用测试函数
+test_model(student, device, test_loader)
+```
