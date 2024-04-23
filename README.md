@@ -12,8 +12,10 @@ pip install torch torchvision
 
 ### 编写代码
 ```python
+# 安装依赖建议在环境配置阶段完成
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
@@ -21,21 +23,18 @@ from torch.utils.data import DataLoader
 # 设定设备
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# 加载数据
+# 加载数据，指定路径
 train_loader = DataLoader(
-    datasets.MNIST('.', train=True, download=True,
-                   transform=transforms.Compose([
-                       transforms.ToTensor(),
-                   ])),
+    datasets.MNIST('data/', train=True, download=True,
+                   transform=transforms.ToTensor()),
     batch_size=128, shuffle=True)
 
 test_loader = DataLoader(
-    datasets.MNIST('.', train=False, transform=transforms.Compose([
-                       transforms.ToTensor(),
-                   ])),
+    datasets.MNIST('data/', train=False,
+                   transform=transforms.ToTensor()),
     batch_size=128, shuffle=True)
 
-# 定义教师模型
+# 定义教师和学生模型
 class TeacherModel(nn.Module):
     def __init__(self):
         super(TeacherModel, self).__init__()
@@ -48,10 +47,8 @@ class TeacherModel(nn.Module):
         )
     
     def forward(self, x):
-        x = x.view(x.size(0), -1)
-        return self.fc(x)
+        return self.fc(x.view(x.size(0), -1))
 
-# 定义学生模型
 class StudentModel(nn.Module):
     def __init__(self):
         super(StudentModel, self).__init__()
@@ -62,36 +59,32 @@ class StudentModel(nn.Module):
         )
 
     def forward(self, x):
-        x = x.view(x.size(0), -1)
-        return self.fc(x)
+        return self.fc(x.view(x.size(0), -1))
 
-# 实例化模型
 teacher = TeacherModel().to(device)
 student = StudentModel().to(device)
 
-# 损失函数和优化器
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(student.parameters(), lr=0.001)
 
-# 训练学生模型
+# 更新后的训练函数
 def train_student(teacher, student, loader):
     teacher.eval()
     student.train()
+    kl_div = nn.KLDivLoss(reduction='batchmean')  # 更稳定的数值表现
 
     for data, target in loader:
         data, target = data.to(device), target.to(device)
-
         optimizer.zero_grad()
-
         output_student = student(data)
-        output_teacher = teacher(data)
-
-        loss = criterion(output_student, target) + 0.5 * nn.KLDivLoss()(F.log_softmax(output_student, dim=1),
-                                                                        F.softmax(output_teacher, dim=1))
+        with torch.no_grad():
+            output_teacher = teacher(data)
+        
+        loss = criterion(output_student, target) + 0.5 * kl_div(F.log_softmax(output_student, dim=1),
+                                                               F.softmax(output_teacher, dim=1))
         loss.backward()
         optimizer.step()
 
-# 训练学生模型
 train_student(teacher, student, train_loader)
 ```
 
